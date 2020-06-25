@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 #include <array>
 #include <vector>
 #include <queue>
@@ -8,6 +9,9 @@
 #include <ctime>
 
 const int SIZE = 8;
+const int ALL = 64;
+const int VALUE_MAX = 20000;
+const int VALUE_MIN = -20000;
 
 struct Point {
     int x, y;
@@ -42,21 +46,22 @@ class State {
 public:
     std::array<std::array<int, SIZE>, SIZE> othello;
     std::vector<Point> valid_spots;
-    Point next_spot;
+    int cur_player;
+    int level;
     int value;
 
-    State(std::array<std::array<int, SIZE>, SIZE> o) {
+    State(std::array<std::array<int, SIZE>, SIZE> o): cur_player(player), level(0), value(0) {
         for(int i = 0; i < SIZE; i++)
             for(int j = 0; j < SIZE; j++)
                 othello[i][j] = o[i][j];
-        setValue();
     }
     State(const State& s) {
         for(int i = 0; i < SIZE; i++)
             for(int j = 0; j < SIZE; j++)
                 othello[i][j] = s.othello[i][j];
         valid_spots = s.valid_spots;
-        next_spot = s.next_spot;
+        cur_player = s.cur_player;
+        level = s.level;
         value = s.value;
     }
     void setValue() {
@@ -74,92 +79,83 @@ public:
                 if((i == 0 && j == 0) || (i == 0 && j == 7) ||
                    (i == 7 && j == 0) || (i == 7 && j == 7)) {
                     if(othello[i][j] == player)
-                        value += 100;
+                        value += 150;
                     else
-                        value -= 100;
+                        value -= 150;
                 }
                 else if((i == 1 && j == 1) || (i == 1 && j == 6) ||
                         (i == 6 && j == 1) || (i == 6 && j == 6)) {
                     if(othello[i][j] == player)
-                        value -= 50;
-                    else
-                        value += 50;
+                        value -= 20;
                 }
                 else if((i == 0 && j == 1) || (i == 1 && j == 0) ||
                         (i == 0 && j == 6) || (i == 1 && j == 7) ||
                         (i == 6 && j == 0) || (i == 7 && j == 1) ||
                         (i == 6 && j == 7) || (i == 7 && j == 6)) {
                     if(othello[i][j] == player)
-                        value -= 30;
-                    else
-                        value += 30;
+                        value -= 10;
+                }
+                else if(i == 0 || i == 7 || j == 0 || j == 7) {
+                    if(othello[i][j] == player)
+                        value += 20;
                 }
             }
-        if(me + op > 30)
-            value += (me - op) * 2;
+        // difference
+        value += (me - op) * 5 * (me + op) / ALL;
+        // mobility
+        value += valid_spots.size() * 4 * ALL / (me + op);
     }
     void update(Point center) {
-        valid_spots.clear();
-
         // flip
         for (Point d: dir) {
             Point p = center + d;
-            if(!p.pt_in_board())
-                continue;
-            if(othello[p.x][p.y] != (3 - player))
-                continue;
-            p = p + d;
-            while(p.pt_in_board() && othello[p.x][p.y] != 0) {
-                if(othello[p.x][p.y] == player) {
-                    while(p != center) {
-                        p = p - d;
-                        othello[p.x][p.y] = player;
+            if(p.pt_in_board() && (othello[p.x][p.y] == (3 - cur_player))) {
+                do {
+                    if(othello[p.x][p.y] == cur_player) {
+                        while(p != center) {
+                            p = p - d;
+                            othello[p.x][p.y] = cur_player;
+                        }
+                        break;
                     }
-                    break;
-                }
-                p = p + d;
+                    p = p + d;
+                } while(p.pt_in_board() && othello[p.x][p.y]);
             }
         }
-        // push valid_spots
+        cur_player = 3 - cur_player;
+        // change valid_spots
+        valid_spots.clear();
         for(int i = 0; i < SIZE; i++)
             for(int j = 0; j < SIZE; j++) {
-                if(othello[i][j] != 0)
-                    continue;
                 Point p(i, j);
                 if(is_valid_spot(p))
                     valid_spots.push_back(p);
             }
 
-        setValue();
+        level++;
     }
     bool is_valid_spot(Point center) {
+        if(othello[center.x][center.y])
+            return false;
         for (Point d: dir) {
             Point p = center + d;
-            if(!p.pt_in_board())
-                continue;
-            if(othello[p.x][p.y] != (3 - player))
-                continue;
-            p = p + d;
-            while(p.pt_in_board() && othello[p.x][p.y] != 0) {
-                if(othello[p.x][p.y] == player)
-                    return true;
-                p = p + d;
+            if(p.pt_in_board() && (othello[p.x][p.y] == (3 - cur_player))) {
+                do {
+                    if(othello[p.x][p.y] == cur_player)
+                        return true;
+                    p = p + d;
+                } while(p.pt_in_board() && othello[p.x][p.y]);
             }
         }
         return false;
-    }
-    bool operator<(const State& rhs) const {
-        return value < rhs.value;
     }
 };
 
 void read_board(std::ifstream& fin) {
     fin >> player;
-    for (int i = 0; i < SIZE; i++) {
-        for (int j = 0; j < SIZE; j++) {
+    for (int i = 0; i < SIZE; i++)
+        for (int j = 0; j < SIZE; j++)
             fin >> board[i][j];
-        }
-    }
 }
 
 void read_valid_spots(std::ifstream& fin) {
@@ -172,35 +168,61 @@ void read_valid_spots(std::ifstream& fin) {
     }
 }
 
-void write_valid_spot(std::ofstream& fout) {
-    State s(board);
-    std::priority_queue<State> pq;
+std::map<int, Point> val_move;
 
-    for (auto c : next_valid_spots) {
-        // Remember to flush the output to ensure the last action is written to file.
-        fout << c.x << " " << c.y << std::endl;
-        fout.flush();
-        State next = s;
-        next.update(c);
-        next.next_spot = c;
-        pq.push(next);
+int minimax(State s, int depth, int alpha, int beta) {
+    if(depth == 0) {
+        s.setValue();
+        return s.value;
     }
+    else if(s.cur_player == player) {
+        int val = VALUE_MIN;
 
-    while(!pq.empty()) {
-        State cur = pq.top();
-        // Remember to flush the output to ensure the last action is written to file.
-        fout << cur.next_spot.x << " " << cur.next_spot.y << std::endl;
-        fout.flush();
-
-        pq.pop();
-
-        for(auto c : cur.valid_spots) {
-            State next = cur;
-            next.update(c);
-            if(next.value > cur.value - 200)
-                pq.push(next);
+        int n = s.valid_spots.size();
+        for(int i = 0; i < n; i++) {
+            State next = s;
+            next.update(next_valid_spots[i]);
+            int m = minimax(next, depth - 1, alpha, beta);
+            val = std::max(val, m);
+            alpha = std::max(alpha, val);
+            if(s.level == 0)
+                val_move[m] = next_valid_spots[i];
+            if(beta <= alpha)
+                break;
+        return val;
         }
     }
+    else if(s.cur_player == (3 - player)) {
+        int val = VALUE_MAX;
+
+        int n = s.valid_spots.size();
+        for(int i = 0; i < n; i++) {
+            State next = s;
+            next.update(next_valid_spots[i]);
+            int m = minimax(next, depth - 1, alpha, beta);
+            val = std::min(val, m);
+            beta = std::min(beta, val);
+            if(s.level == 0)
+                val_move[m] = next_valid_spots[i];
+            if(beta <= alpha)
+                break;
+            return val;
+        }
+    }
+}
+
+void write_valid_spot(std::ofstream& fout) {
+    std::vector<State> old_level, new_level;
+
+    State s(board);
+    s.valid_spots = next_valid_spots;
+
+    int val = minimax(s, 5, VALUE_MIN, VALUE_MAX);
+    Point best = val_move[val];
+    // Remember to flush the output to ensure the last action is written to file.
+    fout << best.x << " " << best.y << std::endl;
+    fout.flush();
+
 }
 
 int main(int, char** argv) {
@@ -213,4 +235,3 @@ int main(int, char** argv) {
     fout.close();
     return 0;
 }
-
