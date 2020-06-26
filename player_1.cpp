@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <vector>
-#include <queue>
 #include <map>
 #include <cstdlib>
 #include <ctime>
@@ -29,18 +28,13 @@ struct Point {
 	Point operator-(const Point& rhs) const {
 		return Point(x - rhs.x, y - rhs.y);
 	}
-	bool pt_in_board() {
-        if(x >= 0 && x < SIZE && y >= 0 && y < SIZE)
-            return true;
-        return false;
-	}
 };
 
 int player;
-const std::array<Point, 8> dir{{Point(-1, -1), Point(-1, 0), Point(-1, 1), Point(0, -1),
-                                Point(0, 1), Point(1, -1), Point(1, 0), Point(1, 1)}};
 std::array<std::array<int, SIZE>, SIZE> board;
 std::vector<Point> next_valid_spots;
+const std::array<Point, 8> dir{{Point(-1, -1), Point(-1, 0), Point(-1, 1), Point(0, -1),
+                                Point(0, 1), Point(1, -1), Point(1, 0), Point(1, 1)}};
 
 class State {
 public:
@@ -49,8 +43,9 @@ public:
     int cur_player;
     int level;
     int value;
+    bool game_end;
 
-    State(std::array<std::array<int, SIZE>, SIZE> o): cur_player(player), level(0), value(0) {
+    State(std::array<std::array<int, SIZE>, SIZE> o): cur_player(player), level(0), value(0), game_end(false) {
         for(int i = 0; i < SIZE; i++)
             for(int j = 0; j < SIZE; j++)
                 othello[i][j] = o[i][j];
@@ -63,6 +58,7 @@ public:
         cur_player = s.cur_player;
         level = s.level;
         value = s.value;
+        game_end = s.game_end;
     }
     void setValue() {
         value = 0;
@@ -79,14 +75,16 @@ public:
                 if((i == 0 && j == 0) || (i == 0 && j == 7) ||
                    (i == 7 && j == 0) || (i == 7 && j == 7)) {
                     if(othello[i][j] == player)
-                        value += 150;
+                        value += 300;
                     else
-                        value -= 150;
+                        value -= 300;
                 }
                 else if((i == 1 && j == 1) || (i == 1 && j == 6) ||
                         (i == 6 && j == 1) || (i == 6 && j == 6)) {
                     if(othello[i][j] == player)
                         value -= 20;
+                    else
+                        value += 20;
                 }
                 else if((i == 0 && j == 1) || (i == 1 && j == 0) ||
                         (i == 0 && j == 6) || (i == 1 && j == 7) ||
@@ -94,10 +92,14 @@ public:
                         (i == 6 && j == 7) || (i == 7 && j == 6)) {
                     if(othello[i][j] == player)
                         value -= 10;
+                    else
+                        value += 10;
                 }
                 else if(i == 0 || i == 7 || j == 0 || j == 7) {
                     if(othello[i][j] == player)
                         value += 20;
+                    else
+                        value -= 20;
                 }
             }
         // difference
@@ -106,10 +108,26 @@ public:
         value += valid_spots.size() * 4 * ALL / (me + op);
     }
     void update(Point center) {
-        // flip
+        flip(center);
+
+        cur_player = 3 - cur_player;
+        change_valid_spots();
+
+        if(!valid_spots.size() && !game_end) {
+            cur_player = 3 - cur_player;
+            change_valid_spots();
+        }
+        level++;
+    }
+
+private:
+    bool is_in_board(Point p) {
+        return p.x >= 0 && p.x < SIZE && p.y >= 0 && p.y < SIZE;
+    }
+    void flip(Point center) {
         for (Point d: dir) {
             Point p = center + d;
-            if(p.pt_in_board() && (othello[p.x][p.y] == (3 - cur_player))) {
+            if(is_in_board(p) && (othello[p.x][p.y] == (3 - cur_player))) {
                 do {
                     if(othello[p.x][p.y] == cur_player) {
                         while(p != center) {
@@ -119,35 +137,35 @@ public:
                         break;
                     }
                     p = p + d;
-                } while(p.pt_in_board() && othello[p.x][p.y]);
+                } while(is_in_board(p) && othello[p.x][p.y]);
             }
         }
-        cur_player = 3 - cur_player;
-        // change valid_spots
-        valid_spots.clear();
-        for(int i = 0; i < SIZE; i++)
-            for(int j = 0; j < SIZE; j++) {
-                Point p(i, j);
-                if(is_valid_spot(p))
-                    valid_spots.push_back(p);
-            }
-
-        level++;
     }
     bool is_valid_spot(Point center) {
-        if(othello[center.x][center.y])
-            return false;
         for (Point d: dir) {
             Point p = center + d;
-            if(p.pt_in_board() && (othello[p.x][p.y] == (3 - cur_player))) {
+            if(is_in_board(p) && (othello[p.x][p.y] == (3 - cur_player))) {
                 do {
                     if(othello[p.x][p.y] == cur_player)
                         return true;
                     p = p + d;
-                } while(p.pt_in_board() && othello[p.x][p.y]);
+                } while(is_in_board(p) && othello[p.x][p.y]);
             }
         }
         return false;
+    }
+    void change_valid_spots() {
+        valid_spots.clear();
+        game_end = true;
+        for(int i = 0; i < SIZE; i++)
+            for(int j = 0; j < SIZE; j++) {
+                Point p(i, j);
+                if(!othello[i][j]) {
+                    game_end = false;
+                    if(is_valid_spot(p))
+                        valid_spots.push_back(p);
+                }
+            }
     }
 };
 
@@ -171,7 +189,7 @@ void read_valid_spots(std::ifstream& fin) {
 std::map<int, Point> val_move;
 
 int minimax(State s, int depth, int alpha, int beta) {
-    if(depth == 0) {
+    if(depth == 0 || s.game_end) {
         s.setValue();
         return s.value;
     }
@@ -189,8 +207,8 @@ int minimax(State s, int depth, int alpha, int beta) {
                 val_move[m] = next_valid_spots[i];
             if(beta <= alpha)
                 break;
-        return val;
         }
+        return val;
     }
     else if(s.cur_player == (3 - player)) {
         int val = VALUE_MAX;
@@ -206,8 +224,8 @@ int minimax(State s, int depth, int alpha, int beta) {
                 val_move[m] = next_valid_spots[i];
             if(beta <= alpha)
                 break;
-            return val;
         }
+        return val;
     }
 }
 
@@ -218,7 +236,14 @@ void write_valid_spot(std::ofstream& fout) {
     s.valid_spots = next_valid_spots;
 
     int val = minimax(s, 5, VALUE_MIN, VALUE_MAX);
-    Point best = val_move[val];
+
+    Point best;
+    auto iter = val_move.find(val);
+    if(iter != val_move.end())
+        best = val_move[val];
+    else
+        best = next_valid_spots[0];
+
     // Remember to flush the output to ensure the last action is written to file.
     fout << best.x << " " << best.y << std::endl;
     fout.flush();
