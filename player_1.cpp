@@ -60,6 +60,50 @@ public:
         value = s.value;
         game_end = s.game_end;
     }
+    int corner(int x, int y) {
+        int val = 500;
+        if(x == 0 && y == 0) {
+            for(int i = 1; i < 7; i++) {
+                if(othello[x][y] == othello[i][y]) val += 50;
+                else break;
+            }
+            for(int j = 1; j < 7; j++) {
+                if(othello[x][y] == othello[x][j]) val += 50;
+                else break;
+            }
+        }
+        else if(x == 0 && y == 7) {
+            for(int i = 1; i < 7; i++) {
+                if(othello[x][y] == othello[i][y]) val += 50;
+                else break;
+            }
+            for(int j = 6; j > 0; j--) {
+                if(othello[x][y] == othello[x][j]) val += 50;
+                else break;
+            }
+        }
+        else if(x == 7 && y == 0) {
+            for(int i = 6; i > 0; i--) {
+                if(othello[x][y] == othello[i][y]) val += 50;
+                else break;
+            }
+            for(int j = 1; j < 7; j++) {
+                if(othello[x][y] == othello[x][j]) val += 50;
+                else break;
+            }
+        }
+        else if(x == 7 && y == 7) {
+            for(int i = 6; i > 0; i--) {
+                if(othello[x][y] == othello[i][y]) val += 50;
+                else break;
+            }
+            for(int j = 6; j > 0; j--) {
+                if(othello[x][y] == othello[x][j]) val += 50;
+                else break;
+            }
+        }
+        return val;
+    }
     void setValue() {
         value = 0;
         int me = 0, op = 0;
@@ -67,45 +111,34 @@ public:
             for(int j = 0; j < SIZE; j++) {
                 if(!othello[i][j]) // empty
                     continue;
-                if(othello[i][j] == player)
-                    me++;
-                else
-                    op++;
-
+                int mul = (othello[i][j] == player)? 1 : -1;
+                if(othello[i][j] == player) me++;
+                else op++;
                 if((i == 0 && j == 0) || (i == 0 && j == 7) ||
                    (i == 7 && j == 0) || (i == 7 && j == 7)) {
-                    if(othello[i][j] == player)
-                        value += 300;
-                    else
-                        value -= 300;
+                    value += mul * corner(i, j);
                 }
                 else if((i == 1 && j == 1) || (i == 1 && j == 6) ||
                         (i == 6 && j == 1) || (i == 6 && j == 6)) {
-                    if(othello[i][j] == player)
-                        value -= 20;
-                    else
-                        value += 20;
+                    value -= mul * 60;
                 }
                 else if((i == 0 && j == 1) || (i == 1 && j == 0) ||
                         (i == 0 && j == 6) || (i == 1 && j == 7) ||
                         (i == 6 && j == 0) || (i == 7 && j == 1) ||
                         (i == 6 && j == 7) || (i == 7 && j == 6)) {
-                    if(othello[i][j] == player)
-                        value -= 10;
-                    else
-                        value += 10;
+                    value -= mul * 40;
                 }
-                else if(i == 0 || i == 7 || j == 0 || j == 7) {
-                    if(othello[i][j] == player)
-                        value += 20;
-                    else
-                        value -= 20;
-                }
+                /*else if(i == 0 || i == 7 || j == 0 || j == 7) {
+                    value += mul * 20;
+                }*/
             }
+        int mul = (cur_player == player)? 1 : -1;
         // difference
-        value += (me - op) * 5 * (me + op) / ALL;
+        //value += (me - op) * 4 * (me + op) / ALL;
         // mobility
-        value += valid_spots.size() * 4 * ALL / (me + op);
+        value += mul * valid_spots.size() * 2 * (1 - (me + op) / ALL);
+        if(game_end)
+            value = me - op;
     }
     void update(Point center) {
         flip(center);
@@ -230,20 +263,23 @@ int minimax(State s, int depth, int alpha, int beta) {
 }
 
 void write_valid_spot(std::ofstream& fout) {
+    // Remember to flush the output to ensure the last action is written to file.
+    //fout << next_valid_spots[0].x << " " << next_valid_spots[0].y << std::endl;
+    //fout.flush();
+
     std::vector<State> old_level, new_level;
 
     State s(board);
     s.valid_spots = next_valid_spots;
 
-    int val = minimax(s, 5, VALUE_MIN, VALUE_MAX);
+    int val = minimax(s, 1, VALUE_MIN, VALUE_MAX);
+    Point best = val_move[val];
+    // Remember to flush the output to ensure the last action is written to file.
+    fout << best.x << " " << best.y << std::endl;
+    fout.flush();
 
-    Point best;
-    auto iter = val_move.find(val);
-    if(iter != val_move.end())
-        best = val_move[val];
-    else
-        best = next_valid_spots[0];
-
+    val = minimax(s, 7, VALUE_MIN, VALUE_MAX);
+    best = val_move[val];
     // Remember to flush the output to ensure the last action is written to file.
     fout << best.x << " " << best.y << std::endl;
     fout.flush();
